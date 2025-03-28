@@ -193,17 +193,10 @@ jobs:
           fi
           echo "Using BUILD_SCRIPT_PATH: $BUILD_SCRIPT_PATH"
 
-      - name: Run Oplus Build Kernel Script
-        working-directory: builds/${{ env.ROOT_DIR }}
+      - name: Build kernel
         run: |
-          if [ -f "kernel_platform/oplus/build/oplus_build_kernel.sh" ]; then
-            echo "✅ Found oplus_build_kernel.sh, executing..."
-            chmod +x kernel_platform/oplus/build/oplus_build_kernel.sh
-            ./kernel_platform/oplus/build/oplus_build_kernel.sh || { echo "❌ oplus_build_kernel.sh failed"; exit 1; }
-          else
-            echo "❌ oplus_build_kernel.sh not found!"
-            exit 1
-          fi
+         cd kernel_workspace
+         LTO=full ./kernel_platform/oplus/build/oplus_build_kernel.sh -android14-6.1
 
       - name: Create ZIP Package
         working-directory: builds/${{ env.ROOT_DIR }}
@@ -231,4 +224,3 @@ jobs:
         with:
           name: kernel-${{ env.ROOT_DIR }}
           path: builds/${{ env.ROOT_DIR }}/*.zip
-
