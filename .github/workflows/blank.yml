@@ -14,6 +14,9 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
 
+    - name: Ensure build directory exists
+      run: mkdir -p /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}
+
     - name: Install repo tool
       run: |
         sudo apt-get update
@@ -30,6 +33,7 @@ jobs:
         done
 
     - name: Setup kernel platform
+      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}
       run: |
         mkdir -p kernel_platform/oneplus13r_v
         cd kernel_platform/oneplus13r_v
@@ -38,7 +42,7 @@ jobs:
         rm -rf ./kernel_platform/common/android/abi_gki_protected_exports_*
 
     - name: Setup Kernel Source
-      working-directory: builds/${{ env.ROOT_DIR }}
+      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}
       run: |
         mkdir -p kernel_platform/oneplus13r_v
         cd kernel_platform/oneplus13r_v
@@ -47,7 +51,7 @@ jobs:
         rm -rf ./kernel_platform/common/android/abi_gki_protected_exports_*
 
     - name: Setup KernelSU
-      working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
+      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
       run: |
         curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
         git submodule update --init --recursive
@@ -57,7 +61,7 @@ jobs:
         sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
 
     - name: Setup SUSFS
-      working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
+      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
       run: |
         set -euxo pipefail
         git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1
@@ -78,7 +82,7 @@ jobs:
         patch -p1 -F 3 < syscall_hooks.patch || true
 
     - name: Configure Kernel
-      working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
+      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
       run: |
         set -e
         CONFIGS=(
@@ -118,7 +122,7 @@ jobs:
         sed -i '2s/check_defconfig//' ./common/build.config.gki
 
     - name: Run sed Commands
-      working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
+      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
       run: |
         echo "Running sed commands..."
         sed -i 's/check_defconfig//' ./common/build.config.gki
@@ -128,7 +132,7 @@ jobs:
         sed -i 's/-dirty//' ./build/kernel/kleaf/workspace_status_stamp.py || echo "No workspace_status_stamp.py!"
 
     - name: Build Kernel
-      working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/
+      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/
       run: |
         cd kernel_platform
         mkdir out
@@ -145,7 +149,7 @@ jobs:
           -o "$(pwd)/out" || { echo "Bazel build failed"; exit 1; }
 
     - name: Create ZIP Package
-      working-directory: builds/${{ env.ROOT_DIR }}
+      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}
       run: |
         if [ ! -f kernel_platform/oneplus13r_v/kernel_platform/out/dist/Image ]; then
           echo "❌ Kernel image not found"
@@ -169,4 +173,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: kernel-${{ env.ROOT_DIR }}
-        path: builds/${{ env.ROOT_DIR }}/*.zip
+        path: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}/*.zip
