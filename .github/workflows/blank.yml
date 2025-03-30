@@ -1,103 +1,160 @@
+# Workflow name
 name: One+ Build Susf4Ksu
 
+# Workflow triggers:
+# - Pushes to the 'main' branch
+# - Manual trigger via the GitHub Actions UI (workflow_dispatch)
 on:
   push:
     branches:
       - main
   workflow_dispatch: # Input removed as CI module download is now unconditional
 
+# Environment variables available to all jobs and steps
 env:
+  # Set DEBIAN_FRONTEND to noninteractive to prevent prompts during package installations
   DEBIAN_FRONTEND: noninteractive
+  # Prefix for the root build directory name
   ROOT_DIR_PREFIX: "OP13r-A15"
+  # Default branch for certain repositories (though explicitly set in clone steps)
   BRANCH: "android14-6.1"
+  # GitHub token with default permissions provided by Actions runner
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
+  # Define the main build job
   build-release:
+    # Run the job on the latest Ubuntu runner provided by GitHub Actions
     runs-on: ubuntu-latest
     steps:
+      # Step 1: Check out the source code of the repository
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
+          # Fetch only the latest commit to save time and disk space
           fetch-depth: 1
 
+      # Step 2: Free up disk space on the runner
       - name: Free Disk Space
         run: |
+          # Update package lists quietly
           sudo apt-get update -qq
-          sudo apt-get install -qq curl jq # jq dependency for JSON parsing
+          # Install necessary tools (curl for downloading, jq for JSON parsing) quietly
+          sudo apt-get install -qq curl jq
+          # Download and execute a script to free up disk space (pinned to a specific commit for stability)
           curl -fsSL https://raw.githubusercontent.com/kou/arrow/e49d8ae15583ceff03237571569099a6ad62be32/ci/scripts/util_free_space.sh | bash
 
+      # Step 3: Install necessary build dependencies
       - name: Setup Build Environment
         run: |
           sudo apt-get update
+          # Install build tools and libraries required for kernel compilation
+          # --no-install-recommends avoids installing optional packages, saving space/time
           sudo apt-get install -y --no-install-recommends \
             python3-pip curl git zip unzip gcc g++ make ninja-build file \
             bc bison flex libssl-dev libelf-dev wget build-essential \
             python3-dev python3-setuptools rsync ccache cmake libdw-dev zlib1g-dev jq
 
+      # Step 4: Setup ccache for faster subsequent builds
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
+          # Set the maximum cache size
           max-size: 2G
 
+      # Step 5: Setup Python environment and the 'repo' tool
       - name: Setup Python and Repo Tool
         run: |
+          # Upgrade Python's package installer
           python3 -m pip install --upgrade pip
+          # Install Python libraries needed by some build scripts or tools
           pip3 install gitpython xmltodict
+          # Create a local bin directory
           mkdir -p ~/.bin
+          # Download the 'repo' tool
           curl -s https://storage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo
+          # Make the 'repo' tool executable
           chmod a+x ~/.bin/repo
+          # Add the local bin directory to the system PATH for this job
           echo "$HOME/.bin" >> $GITHUB_PATH
+          # Configure git user identity required by 'repo' and potentially patching
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
 
+      # Step 6: Configure the main build directory
       - name: Configure Build Directory
         run: |
+          # Create a unique root directory name including the date and time
           ROOT_DIR="${ROOT_DIR_PREFIX}-$(date +'%Y-%m-%d-%I-%M-%p')-release"
+          # Export ROOT_DIR as an environment variable for subsequent steps
           echo "ROOT_DIR=${ROOT_DIR}" >> $GITHUB_ENV
+          # Create the build directory structure
           mkdir -p "builds/${ROOT_DIR}"
 
+      # Step 7: Clone external repositories needed for the build
       - name: Clone Required Repositories
+        # Set the working directory for this step
         working-directory: builds/${{ env.ROOT_DIR }}
         run: |
+          # Define an array of repositories to clone: URL [options] Destination
           repos=(
             "https://github.com/Kernel-SU/AnyKernel3 --depth=1 AnyKernel3"
             "https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1 susfs4ksu"
             "https://github.com/WildPlusKernel/kernel_patches.git kernel_patches"
           )
+          # Loop through the array and clone each repository
           for repo_info in "${repos[@]}"; do
             repo=$(echo "$repo_info" | awk '{print $1}')
+            # Extract clone arguments (like -b branch or --depth=1)
             branch_or_args=$(echo "$repo_info" | awk '{$1=""; $NF=""; print $0}' | sed 's/^[ \t]*//;s/[ \t]*$//')
             dest=$(echo "$repo_info" | awk '{print $NF}')
             echo "Cloning $repo $branch_or_args into $dest..."
-            git clone $repo $branch_or_args "$dest" || { echo "Failed to clone $repo"; exit 1; }
+            # Execute the git clone command, exit with error if it fails
+            git clone $repo $branch_or_args "$dest" || { echo "❌ Failed to clone $repo"; exit 1; }
           done
 
+      # Step 8: Download and initialize the main kernel source code using 'repo'
       - name: Setup Kernel Source
         working-directory: builds/${{ env.ROOT_DIR }}
         run: |
+          # Create the directory structure for the kernel source
           mkdir -p kernel_platform/oneplus13r_v
           cd kernel_platform/oneplus13r_v
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m oneplus_13r.xml --depth=1 || { echo "Failed to initialize repo"; exit 1; }
-          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags || { echo "Failed to sync repo"; exit 1; }
+          # Initialize the repo client with the OnePlus kernel manifest
+          # --depth=1 limits history to save time/space
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m oneplus_13r.xml --depth=1 || { echo "❌ Failed to initialize repo"; exit 1; }
+          # Sync the repositories defined in the manifest
+          # -c: current branch only, -j: parallel jobs, --force-sync: overwrite local changes
+          # --no-clone-bundle, --no-tags: further optimizations
+          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags || { echo "❌ Failed to sync repo"; exit 1; }
+          # Remove potentially conflicting ABI symbol list files
           rm -rf ./kernel_platform/common/android/abi_gki_protected_exports_*
 
+      # Step 9: Integrate KernelSU into the kernel source
       - name: Setup KernelSU
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
         run: |
+          # Download and execute the official KernelSU setup script for the 'next' branch
           curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
+          # Initialize and update KernelSU submodules
           git submodule update --init --recursive
           cd KernelSU-Next/kernel
+          # Calculate the KernelSU version based on commit count (standard KSU practice)
           KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" 10200)
           echo "Calculated KSU_VERSION: $KSU_VERSION"
+          # Export the calculated version for use in later steps (e.g., zip naming)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+          # Update the version number in the KernelSU Makefile
           sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
 
+      # Step 10: Integrate SUSFS (Safe UMount Stack FileSystem)
       - name: Setup SUSFS
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
         run: |
+          # Enable strict error checking for the script
           set -euxo pipefail
-          echo "Copying patches and source files..."
+          echo "Copying SUSFS patches and source files..."
+          # Copy patches and source files from the previously cloned repos into the kernel tree
           cp ../../../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common/
           cp ../../../kernel_patches/next/0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch ./KernelSU-Next/
           cp ../../../kernel_patches/next/syscall_hooks.patch ./common/
@@ -105,14 +162,20 @@ jobs:
           cp ../../../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
 
           echo "Applying patches..."
+          # Apply SUSFS patch to KernelSU-Next
           cd ./KernelSU-Next
+          # patch -p1: strip 1 leading directory level from patch paths
+          # || true: continue even if patch application fails (use with caution - check logs if build fails)
           patch -p1 < 0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch || true
           cd ../common
+          # Apply main SUSFS patch
           patch -p1 < 50_add_susfs_in_gki-android14-6.1.patch || true
 
+          # Conditionally apply an optional 'hide_stuff' patch if it exists
           if [ -f ../../../kernel_patches/69_hide_stuff.patch ]; then
             echo "Applying hide_stuff patch..."
             cp ../../../kernel_patches/69_hide_stuff.patch ./
+            # -F 3: Ignore more whitespace errors (fuzz factor)
             patch -p1 -F 3 < 69_hide_stuff.patch || true
           else
             echo "hide_stuff patch not found at ../../../kernel_patches/69_hide_stuff.patch"
@@ -121,14 +184,19 @@ jobs:
           echo "Applying syscall_hooks patch..."
           patch -p1 -F 3 < syscall_hooks.patch || true
 
+      # Step 11: Configure kernel build options (enable KSU, SUSFS, etc.)
       - name: Configure Kernel
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
         run: |
+          # Exit immediately if a command exits with a non-zero status
           set -e
           echo "Appending KernelSU/SUSFS configs to gki_defconfig..."
+          # Define an array of kernel config options to enable/disable
           CONFIGS=(
+            # KernelSU core and features
             "CONFIG_KSU=y"
-            "CONFIG_KSU_WITH_KPROBES=n"
+            "CONFIG_KSU_WITH_KPROBES=n" # Disable Kprobes for stability/simplicity if not needed
+            # SUSFS integration with KernelSU
             "CONFIG_KSU_SUSFS=y"
             "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y"
             "CONFIG_KSU_SUSFS_SUS_PATH=y"
@@ -136,95 +204,127 @@ jobs:
             "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y"
             "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y"
             "CONFIG_KSU_SUSFS_SUS_KSTAT=y"
-            "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n"
+            "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" # Disable OverlayFS integration if not needed/stable
             "CONFIG_KSU_SUSFS_TRY_UMOUNT=y"
             "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y"
             "CONFIG_KSU_SUSFS_SPOOF_UNAME=y"
-            "CONFIG_KSU_SUSFS_ENABLE_LOG=y"
+            "CONFIG_KSU_SUSFS_ENABLE_LOG=y" # Enable logging for debugging
             "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y"
             "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y"
             "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y"
             "CONFIG_KSU_SUSFS_SUS_SU=n"
-            # Filesystem
+            # Filesystem features required or beneficial for KSU/SUSFS
             "CONFIG_TMPFS_XATTR=y"
             "CONFIG_TMPFS_POSIX_ACL=y"
-            # Network
+            # Network features (optional, potentially for specific modules/needs)
             "CONFIG_IP_NF_TARGET_TTL=y"
             "CONFIG_IP6_NF_TARGET_HL=y"
             "CONFIG_IP6_NF_MATCH_HL=y"
-            # Scheduler
+            # Scheduler and Performance (optional tweaks)
             "CONFIG_SCHED_CLASS_EXT=y"
-            "CONFIG_SMP=y"
-            "CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y"
-            "CONFIG_MSM_PERFORMANCE=y"
-            # Power consumption
-            "CONFIG_NO_HZ_IDLE=y"
-            "CONFIG_PM_SLEEP_SMP=y"
+            "CONFIG_SMP=y" # Symmetric Multi-Processing (standard)
+            "CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y" # Use schedutil governor
+            "CONFIG_MSM_PERFORMANCE=y" # Qualcomm performance features
+            # Power consumption (optional tweaks)
+            "CONFIG_NO_HZ_IDLE=y" # Tickless idle
+            "CONFIG_PM_SLEEP_SMP=y" # SMP support during suspend/resume
           )
+          # Loop through the defined configs
           for CONFIG in "${CONFIGS[@]}"; do
-            # Avoid adding duplicate lines
+            # Check if the config line already exists EXACTLY (grep -x) in the defconfig file
+            # If it doesn't exist (-q quiet), append it to the file
             grep -qxF "$CONFIG" ./common/arch/arm64/configs/gki_defconfig || echo "$CONFIG" >> ./common/arch/arm64/configs/gki_defconfig
           done
           echo "Modifying build.config.gki..."
+          # Modify the GKI build config, likely to bypass a standard defconfig check
           sed -i 's/check_defconfig//' ./common/build.config.gki
 
+      # Step 12: Run sed commands to clean up the kernel version string
       - name: Run sed Commands
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
         run: |
           echo "Running sed commands to remove -dirty suffix..."
-          sed -i 's/-dirty//' ./common/scripts/setlocalversion
-          sed -i 's/-dirty//' ./msm-kernel/scripts/setlocalversion
-          sed -i 's/-dirty//' ./external/dtc/scripts/setlocalversion
-          sed -i 's/-dirty//' ./build/kernel/kleaf/workspace_status_stamp.py || echo "No workspace_status_stamp.py found to patch."
+          # The build system might add '-dirty' if the git repo has uncommitted changes. Remove it for a clean version string.
+          # Apply to multiple potential locations where version scripts might exist.
+          sed -i 's/-dirty//' ./common/scripts/setlocalversion || echo "sed failed for ./common/scripts/setlocalversion (file might not exist or lack '-dirty')"
+          sed -i 's/-dirty//' ./msm-kernel/scripts/setlocalversion || echo "sed failed for ./msm-kernel/scripts/setlocalversion (file might not exist or lack '-dirty')"
+          sed -i 's/-dirty//' ./external/dtc/scripts/setlocalversion || echo "sed failed for ./external/dtc/scripts/setlocalversion (file might not exist or lack '-dirty')"
+          sed -i 's/-dirty//' ./build/kernel/kleaf/workspace_status_stamp.py || echo "No workspace_status_stamp.py found to patch, or '-dirty' not found."
 
+      # Step 13: Build the kernel using Bazel (common for GKI kernels)
       - name: Build Kernel
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/
         run: |
-          cd kernel_platform
+          cd kernel_platform # Bazel commands run from the workspace root
+          # Create the output directory if it doesn't exist
           mkdir -p out
+          # Prepend the ccache directory to PATH so the build system uses it
           export PATH="/usr/lib/ccache:$PATH"
           echo "Starting kernel build with ThinLTO..."
+          # Run the Bazel build command for the kernel target
+          # --jobs: Use all available processor cores
+          # --verbose_failures: Provide detailed error messages
+          # --config=stamp: Apply version stamping
+          # --user_kmi_symbol_lists: Specify Kernel Module Interface symbol lists for GKI compliance
+          # --ignore_missing_projects: Tolerate missing optional projects in the manifest
+          # --lto=thin: Enable Thin Link Time Optimization (good balance of optimization and build resources)
+          # -o: Specify the output directory relative to the Bazel workspace root
           bazel run //kernel:target \
             --jobs=$(nproc --all) \
             --verbose_failures \
             --config=stamp \
             --user_kmi_symbol_lists=//msm-kernel:android/abi_gki_aarch64_qcom \
             --ignore_missing_projects \
-            --lto=thin \ # Using ThinLTO suitable for ubuntu-latest
-            -o "$(pwd)/out" || { echo "Bazel build failed"; exit 1; }
+            --lto=thin \
+            -o "$(pwd)/out" || { echo "❌ Bazel build failed"; exit 1; }
           echo "Kernel build finished."
 
+      # Step 14: Package the built kernel into a flashable ZIP using AnyKernel3
       - name: Create ZIP Package
         working-directory: builds/${{ env.ROOT_DIR }}
         run: |
           echo "Checking for Kernel Image..."
+          # Define the expected path to the compiled kernel Image file
           KERNEL_IMAGE_PATH="kernel_platform/oneplus13r_v/kernel_platform/out/dist/Image"
+          # Check if the kernel image file exists
           if [ ! -f "$KERNEL_IMAGE_PATH" ]; then
             echo "❌ Kernel image not found at $KERNEL_IMAGE_PATH"
+            # List the contents of the dist directory for debugging if the image is missing
             ls -lR kernel_platform/oneplus13r_v/kernel_platform/out/dist/
             exit 1
           fi
           echo "Copying Kernel Image to AnyKernel3..."
+          # Copy the kernel Image to the AnyKernel3 directory
           cp "$KERNEL_IMAGE_PATH" AnyKernel3/Image || { echo "❌ Failed to copy kernel image"; exit 1; }
 
+          # Navigate into the AnyKernel3 directory
           cd AnyKernel3
           echo "Contents of AnyKernel3 before zipping:"
-          ls -lA
+          ls -lA # List all files including hidden ones
 
+          # Check if the KSUVER environment variable (set in Setup KernelSU step) is available
           if [ -z "${{ env.KSUVER }}" ]; then
             echo "❌ KSUVER environment variable is not set!"
             exit 1
           fi
+          # Construct the ZIP file name including the KSU version
           ZIP_NAME="OP13r-KSU-${{ env.KSUVER }}.zip"
           echo "📦 Creating zip file: $ZIP_NAME"
+          # Create the zip archive, recursively (-r), with maximum compression (-9)
+          # Include all files and hidden files (.* .??*)
           zip -r9 "../$ZIP_NAME" ./* .??* || { echo "❌ Failed to create zip file"; exit 1; }
+          # Navigate back to the parent directory
           cd ..
           echo "Generated Zip:"
-          ls -lh "$ZIP_NAME"
+          ls -lh "$ZIP_NAME" # List the generated zip file with human-readable size
+          # Export the zip file name as an environment variable (might be useful for subsequent jobs/steps)
           echo "zip_name=$ZIP_NAME" >> $GITHUB_ENV
 
+      # Step 15: Upload the generated ZIP file as a build artifact
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
+          # Name the artifact uniquely using the ROOT_DIR variable
           name: kernel-${{ env.ROOT_DIR }}
+          # Specify the path to the file(s) to upload (the generated zip)
           path: builds/${{ env.ROOT_DIR }}/*.zip
