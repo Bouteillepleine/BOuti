@@ -34,7 +34,10 @@ jobs:
     - name: Clone repositories
       run: |
         IFS=$'\n'
-        for repo in ${{ env.REPOS }}; do
+        for repo in \
+        https://gitlab.com/simonpunk/susfs4ksu.git \
+        https://github.com/WildPlusKernel/kernel_patches.git
+        do
           git clone "$repo" || { echo "Failed to clone $repo"; exit 1; }
         done
         unset IFS
