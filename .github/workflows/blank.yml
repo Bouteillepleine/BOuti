@@ -14,7 +14,7 @@ env:
 
 jobs:
   build-release:
-    runs-on: ubuntu-latest-16-cores
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -193,63 +193,7 @@ jobs:
             --ignore_missing_projects \
             --lto=thin \
             -o "$(pwd)/out" || { echo "Bazel build failed"; exit 1; }
-          echo "Kernel build finished."
-
-      - name: Download Latest SUSFS Module from CI # UNCONDITIONAL
-        # if: removed - this step now runs always
-        run: |
-          echo "Downloading SUSFS module from CI artifact..."
-          # Fetch the latest successful run ID on the main branch
-          LATEST_RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs?status=success&branch=main" | jq -r '.workflow_runs[0].id') 
-
-          if [ -z "$LATEST_RUN_ID" ] || [ "$LATEST_RUN_ID" == "null" ]; then
-            echo "Could not find latest successful CI run ID for sidex15/susfs4ksu-module on main branch."
-            exit 1
-          fi
-          echo "Found latest successful run ID: $LATEST_RUN_ID"
-
-          # Find the artifact named "ksu_module_susfs" from that run
-          ARTIFACT_URL=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs/$LATEST_RUN_ID/artifacts" | jq -r '.artifacts[] | select(.name=="ksu_module_susfs") | .archive_download_url') 
-
-          if [ -z "$ARTIFACT_URL" ] || [ "$ARTIFACT_URL" == "null" ]; then
-             echo "Could not find artifact 'ksu_module_susfs' download URL for run ID $LATEST_RUN_ID."
-             # Optional: list available artifacts for debugging
-             echo "Available artifacts:"
-             curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-               "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs/$LATEST_RUN_ID/artifacts" | jq -r '.artifacts[] | .name'
-             exit 1
-          fi
-          echo "Found artifact download URL: $ARTIFACT_URL"
-          
-          # Download the artifact (which is a zip containing the actual module zip)
-          curl -L -o susfs_module_artifact.zip -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "$ARTIFACT_URL" || { echo "Failed to download artifact"; exit 1; }
-          
-          # Extract the actual module zip (assuming it's named ksu_module_susfs*.zip inside the artifact)
-          # If the artifact zip *is* the module, just rename it. If it contains the module, unzip it.
-          # Using unzip -p to extract to stdout and redirect, handles cases where artifact contains other files.
-          # Adjust the pattern if the module name inside the artifact zip is different.
-          unzip -p susfs_module_artifact.zip 'ksu_module_susfs*.zip' > ksu_module_susfs.zip 2>/dev/null || { 
-            echo "Failed to extract 'ksu_module_susfs*.zip' from artifact. Maybe the artifact is the module itself?"
-            # Attempt to use the artifact directly if extraction failed
-            if unzip -t susfs_module_artifact.zip &>/dev/null; then 
-               echo "Treating downloaded artifact as the module zip."
-               mv susfs_module_artifact.zip ksu_module_susfs.zip
-            else
-               echo "Downloaded artifact is not a valid zip file."
-               exit 1
-            fi
-          }
-          
-          echo "Copying downloaded CI module to AnyKernel3 directory..."
-          cp ksu_module_susfs.zip builds/${{ env.ROOT_DIR }}/AnyKernel3/ || { echo "Failed to copy CI module"; exit 1; }
-          
-          # Clean up temporary downloaded files
-          rm -f susfs_module_artifact.zip ksu_module_susfs.zip 
-          echo "SUSFS Module from CI added to AnyKernel3."
-
-      # Step "Download Latest SUSFS Module from Release" has been removed
+          echo "Kernel build finished."     
 
       - name: Create ZIP Package
         working-directory: builds/${{ env.ROOT_DIR }}
