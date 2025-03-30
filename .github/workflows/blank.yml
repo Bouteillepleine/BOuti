@@ -26,6 +26,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -qq curl
           curl -fsSL https://raw.githubusercontent.com/kou/arrow/e49d8ae15583ceff03237571569099a6ad62be32/ci/scripts/util_free_space.sh | bash
+
       - name: Setup Build Environment
         run: |
           sudo apt-get update
@@ -33,6 +34,7 @@ jobs:
             python3-pip curl git zip unzip gcc g++ make ninja-build \
             bc bison flex libssl-dev libelf-dev wget build-essential \
             python3-dev python3-setuptools rsync ccache cmake libdw-dev zlib1g-dev
+
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
@@ -48,12 +50,14 @@ jobs:
           echo "$HOME/.bin" >> $GITHUB_PATH
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
+
       - name: Configure Build Directory
         run: |
           ROOT_DIR="${ROOT_DIR_PREFIX}-$(date +'%Y-%m-%d-%I-%M-%p')-release"
           echo "ROOT_DIR=${ROOT_DIR}" >> $GITHUB_ENV
           mkdir -p "builds/${ROOT_DIR}"
           cd "builds/${ROOT_DIR}"
+
       - name: Clone Required Repositories
         working-directory: builds/${{ env.ROOT_DIR }}
         run: |
@@ -65,6 +69,7 @@ jobs:
           for repo in "${repos[@]}"; do
             git clone $repo || { echo "Failed to clone $repo"; exit 1; }
           done
+
       - name: Setup Kernel Source
         working-directory: builds/${{ env.ROOT_DIR }}
         run: |
@@ -73,6 +78,7 @@ jobs:
           repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m oneplus_13r.xml --depth=1 || { echo "Failed to initialize repo"; exit 1; }
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags || { echo "Failed to sync repo"; exit 1; }
           rm -rf ./kernel_platform/common/android/abi_gki_protected_exports_*
+
       - name: Setup KernelSU
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
         run: |
@@ -82,6 +88,7 @@ jobs:
           KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" 10200)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
+
       - name: Setup SUSFS
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
         run: |
@@ -102,6 +109,7 @@ jobs:
             patch -p1 -F 3 < 69_hide_stuff.patch || true
           fi
           patch -p1 -F 3 < syscall_hooks.patch || true
+
       - name: Configure Kernel
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
         run: |
@@ -141,6 +149,7 @@ jobs:
             echo "$CONFIG" >> ./common/arch/arm64/configs/gki_defconfig
           done
           sed -i '2s/check_defconfig//' ./common/build.config.gki
+
       - name: Run sed Commands
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
         run: |
@@ -150,6 +159,7 @@ jobs:
           sed -i 's/-dirty//' ./msm-kernel/scripts/setlocalversion
           sed -i 's/-dirty//' ./external/dtc/scripts/setlocalversion
           sed -i 's/-dirty//' ./build/kernel/kleaf/workspace_status_stamp.py || echo "No workspace_status_stamp.py!"
+
       - name: Build Kernel
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/
         run: |
@@ -166,6 +176,7 @@ jobs:
             --ignore_missing_projects \
             --lto=full \
             -o "$(pwd)/out" || { echo "Bazel build failed"; exit 1; }
+
       - name: Create ZIP Package
         working-directory: builds/${{ env.ROOT_DIR }}
         run: |
@@ -180,6 +191,7 @@ jobs:
           zip -r "../$ZIP_NAME" ./* || { echo "❌ Failed to create zip file"; exit 1; }
           ls -lh "../$ZIP_NAME"
           echo "zip_name=$ZIP_NAME" >> $GITHUB_ENV
+
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
