@@ -12,9 +12,6 @@ jobs:
 
     env:
       ROOT_DIR: build_directory
-      ANYKERNEL_BRANCH: main  # Updated to use the main branch
-      SUSFS_BRANCH: gki-android14-6.1
-      KERNEL_PATCH_BRANCH: main
       CONFIG: configuration_name
 
     steps:
@@ -28,9 +25,14 @@ jobs:
 
     - name: Clone repositories
       run: |
-        git clone https://github.com/Kernel-SU/AnyKernel3.git --depth=1
-        git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
-        git clone https://github.com/WildPlusKernel/kernel_patches.git
+        repos=(
+          "https://github.com/Kernel-SU/AnyKernel3 --depth=1"
+          "https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1"
+          "https://github.com/WildPlusKernel/kernel_patches.git"
+        )
+        for repo in "${repos[@]}"; do
+          git clone $repo || { echo "Failed to clone $repo"; exit 1; }
+        done
 
     - name: Initialize and Sync Kernel Source
       run: |
@@ -61,7 +63,7 @@ jobs:
         cp ../../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./common/
         cp ../../susfs4ksu/kernel_patches/fs/* ./common/fs/
         cp ../../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-        
+
         cd ./KernelSU-Next
         echo "Applying next SUSFS patches..."
         cp ../../../kernel_patches/next/0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch ./
