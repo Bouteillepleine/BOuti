@@ -39,13 +39,9 @@ jobs:
         echo "Creating folder for configuration: $CONFIG..."
         mkdir -p "$CONFIG"
         cd "$CONFIG"
-        
-        - name: Initialize and sync kernel source
-        run: |
-          cd "$CONFIG"
-          echo "Initializing and syncing kernel source..."
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest -b oneplus/sm8650/oneplus_13r --repo-rev=v2.16 --depth=1
-          repo sync -c -j$(nproc --all) --no-tags --fail-fast
+        echo "Initializing and syncing kernel source..."
+        repo init -u https://github.com/OnePlusOSS/kernel_manifest -b oneplus/sm8650/oneplus_13r --repo-rev=v2.16 --depth=1
+        repo sync -c -j$(nproc --all) --no-tags --fail-fast
 
     - name: Add KernelSU
       run: |
@@ -159,7 +155,4 @@ jobs:
         zip -r "../$ZIP_NAME" ./* || { echo "❌ Failed to create zip file"; exit 1; }
 
     - name: Upload Build Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: kernel-$CONFIG
-        path: $CONFIG/kernel_platform/../*.zip
+      uses](#) ▋
