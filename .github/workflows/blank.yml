@@ -177,4 +177,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: kernel-${{ env.ROOT_DIR }}
-        path: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}/*.zip
+        path: /home/runner/work/BOuti/BOuti/build
