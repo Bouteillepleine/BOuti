@@ -155,4 +155,7 @@ jobs:
         zip -r "../$ZIP_NAME" ./* || { echo "❌ Failed to create zip file"; exit 1; }
 
     - name: Upload Build Artifacts
-      uses](#) ▋
+      uses: actions/upload-artifact@v4
+      with:
+          name: kernel-${{ env.ROOT_DIR }}
+          path: builds/${{ env.ROOT_DIR }}/*.zip
