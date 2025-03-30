@@ -17,10 +17,10 @@ jobs:
     - name: Ensure build directory exists
       run: mkdir -p /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}
 
-    - name: Install repo tool
+    - name: Install required tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y repo
+        sudo apt-get install -y repo git curl zip
 
     - name: Clone repositories
       run: |
@@ -145,7 +145,7 @@ jobs:
           --config=stamp \
           --user_kmi_symbol_lists=//msm-kernel:android/abi_gki_aarch64_qcom \
           --ignore_missing_projects \
-          --lto=thin \
+          --lto=full \
           -o "$(pwd)/out" || { echo "Bazel build failed"; exit 1; }
 
     - name: Create ZIP Package
