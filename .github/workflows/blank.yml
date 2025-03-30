@@ -1,4 +1,4 @@
-name: One+ build Susf4Ksu
+name: One+ Build Susf4Ksu
 
 on:
   push:
@@ -14,8 +14,7 @@ env:
 
 jobs:
   build-release:
-    # Running on standard runner, ThinLTO build
-    runs-on: ubuntu-latest 
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -34,12 +33,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             python3-pip curl git zip unzip gcc g++ make ninja-build file \
             bc bison flex libssl-dev libelf-dev wget build-essential \
-            python3-dev python3-setuptools rsync ccache cmake libdw-dev zlib1g-dev jq # jq dependency
+            python3-dev python3-setuptools rsync ccache cmake libdw-dev zlib1g-dev jq
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          max-size: 2G # Standard size for ubuntu-latest
+          max-size: 2G
 
       - name: Setup Python and Repo Tool
         run: |
@@ -116,9 +115,9 @@ jobs:
             cp ../../../kernel_patches/69_hide_stuff.patch ./
             patch -p1 -F 3 < 69_hide_stuff.patch || true
           else
-             echo "hide_stuff patch not found at ../../../kernel_patches/69_hide_stuff.patch"
+            echo "hide_stuff patch not found at ../../../kernel_patches/69_hide_stuff.patch"
           fi
-          
+
           echo "Applying syscall_hooks patch..."
           patch -p1 -F 3 < syscall_hooks.patch || true
 
@@ -158,7 +157,7 @@ jobs:
             "CONFIG_SMP=y"
             "CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y"
             "CONFIG_MSM_PERFORMANCE=y"
-            # power consumption
+            # Power consumption
             "CONFIG_NO_HZ_IDLE=y"
             "CONFIG_PM_SLEEP_SMP=y"
           )
@@ -195,9 +194,7 @@ jobs:
             --ignore_missing_projects \
             --lto=thin \ # Using ThinLTO suitable for ubuntu-latest
             -o "$(pwd)/out" || { echo "Bazel build failed"; exit 1; }
-          echo "Kernel build finished."     
-
-      # NO STEP HERE TO DOWNLOAD SUSFS MODULE FROM CI/RELEASE
+          echo "Kernel build finished."
 
       - name: Create ZIP Package
         working-directory: builds/${{ env.ROOT_DIR }}
@@ -210,26 +207,20 @@ jobs:
             exit 1
           fi
           echo "Copying Kernel Image to AnyKernel3..."
-          cp "$KERNEL_IMAGE_PATH" AnyKernel3/Image || {
-            echo "❌ Failed to copy kernel image"
-            exit 1
-          }
-          
+          cp "$KERNEL_IMAGE_PATH" AnyKernel3/Image || { echo "❌ Failed to copy kernel image"; exit 1; }
+
           cd AnyKernel3
           echo "Contents of AnyKernel3 before zipping:"
-          ls -lA # Use -A to see hidden files like .gitkeep if AnyKernel3 uses them
-          
+          ls -lA
+
           if [ -z "${{ env.KSUVER }}" ]; then
             echo "❌ KSUVER environment variable is not set!"
             exit 1
           fi
           ZIP_NAME="OP13r-KSU-${{ env.KSUVER }}.zip"
           echo "📦 Creating zip file: $ZIP_NAME"
-          zip -r9 "../$ZIP_NAME" ./* .??* || { # Include dotfiles if any, use level 9 compression
-            echo "❌ Failed to create zip file"
-            exit 1
-          }
-          cd .. 
+          zip -r9 "../$ZIP_NAME" ./* .??* || { echo "❌ Failed to create zip file"; exit 1; }
+          cd ..
           echo "Generated Zip:"
           ls -lh "$ZIP_NAME"
           echo "zip_name=$ZIP_NAME" >> $GITHUB_ENV
