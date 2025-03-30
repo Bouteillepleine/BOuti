@@ -184,9 +184,7 @@ jobs:
           mkdir -p out
           export PATH="/usr/lib/ccache:$PATH"
           echo "Starting kernel build with ThinLTO..."
-          ./build_with_bazel.py \
-            -t pineapple \
-            gki \
+          bazel run //kernel:target \
             --jobs=$(nproc --all) \
             --verbose_failures \
             --config=stamp \
