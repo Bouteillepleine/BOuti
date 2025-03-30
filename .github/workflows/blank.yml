@@ -12,19 +12,14 @@ jobs:
 
     env:
       ROOT_DIR: build_directory
-      REPOS: |
-        https://gitlab.com/simonpunk/susfs4ksu.git
-        https://github.com/WildPlusKernel/kernel_patches.git
-      KERNEL_MANIFEST_URL: https://github.com/OnePlusOSS/kernel_manifest.git
-      BRANCH: oneplus/sm8650
-      XML_FILE: oneplus_13r.xml
+      ANYKERNEL_BRANCH: your_anykernel_branch
+      SUSFS_BRANCH: gki-android14-6.1
+      KERNEL_PATCH_BRANCH: main
+      CONFIG: configuration_name
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
-
-    - name: Ensure build directory exists
-      run: mkdir -p /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}
 
     - name: Install required tools
       run: |
@@ -33,64 +28,68 @@ jobs:
 
     - name: Clone repositories
       run: |
-        IFS=$'\n'
-        for repo in \
-        https://gitlab.com/simonpunk/susfs4ksu.git \
-        https://github.com/WildPlusKernel/kernel_patches.git
-        do
-          git clone "$repo" || { echo "Failed to clone $repo"; exit 1; }
-        done
-        unset IFS
+        git clone https://github.com/TheWildJames/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
+        git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH"
+        git clone https://github.com/TheWildJames/kernel_patches.git -b "$KERNEL_PATCH_BRANCH"
 
-    - name: Setup kernel platform
-      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}
+    - name: Initialize and Sync Kernel Source
       run: |
-        mkdir -p kernel_platform/oneplus13r_v
-        cd kernel_platform/oneplus13r_v
-        retry_count=0
-        max_retries=3
-        until [ $retry_count -ge $max_retries ]; do
-          repo init -u ${{ env.KERNEL_MANIFEST_URL }} -b ${{ env.BRANCH }} -m ${{ env.XML_FILE }} --depth=1 && break || retry_count=$((retry_count+1)) && sleep 10
-        done
-        if [ $retry_count -eq $max_retries ]; then
-          echo "Failed to initialize repo after $max_retries attempts."
-          exit 1
-        fi
-        repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags || { echo "Failed to sync repo"; exit 1; }
+        echo "Creating folder for configuration: $CONFIG..."
+        mkdir -p "$CONFIG"
+        cd "$CONFIG"
+        
+        echo "Initializing and syncing kernel source..."
+        repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b ${{ inputs.branch }} -m ${{ inputs.manifest }} --repo-rev=v2.16 --depth=1
+        repo --trace sync -c -j$(nproc --all) --no-tags --fail-fast
 
-    - name: Setup KernelSU
-      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
+    - name: Add KernelSU
       run: |
+        echo "Changing to configuration directory: $CONFIG..."
+        cd "$CONFIG/kernel_platform"
+        
+        echo "Adding KernelSU..."
         curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
-        git submodule update --init --recursive
-        cd KernelSU-Next/kernel
-        KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" 10200)
-        echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-        sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
+        KSU_VERSION=$(cd ./KernelSU-Next/kernel && git describe --tags --abbrev=0)
+        echo "KSUVER=${KSU_VERSION}" >> $GITHUB_ENV
 
-    - name: Setup SUSFS
-      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
+    - name: Apply SUSFS Patches
       run: |
-        set -euxo pipefail
-        cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common/
-        cp kernel_patches/next/0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch ./KernelSU-Next/
-        cp kernel_patches/next/syscall_hooks.patch ./common/
-        cp susfs4ksu/kernel_patches/fs/* ./common/fs/
-        cp susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+        echo "Changing to configuration directory: $CONFIG..."
+        cd "$CONFIG/kernel_platform"
+        
+        echo "Applying SUSFS patches..."
+        cp ../../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./common/
+        cp ../../susfs4ksu/kernel_patches/fs/* ./common/fs/
+        cp ../../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+
         cd ./KernelSU-Next
-        patch -p1 < 0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch || true
+        echo "Applying next SUSFS patches..."
+        cp ../../../kernel_patches/next/0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch ./
+        patch -p1 --forward < 0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch || true
+        
         cd ../common
-        patch -p1 < 50_add_susfs_in_gki-android14-6.1.patch || true
-        if [ -f kernel_patches/69_hide_stuff.patch ]; then
-          cp kernel_patches/69_hide_stuff.patch ./
-          patch -p1 -F 3 < 69_hide_stuff.patch || true
-        fi
-        patch -p1 -F 3 < syscall_hooks.patch || true
+        patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
 
-    - name: Configure Kernel
-      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
+    - name: Apply KSU Hooks
       run: |
-        set -e
+        echo "Changing to configuration directory: $CONFIG..."
+        cd "$CONFIG/kernel_platform/common"
+        cp ../../../kernel_patches/next/next_hooks.patch ./
+        patch -p1 --fuzz=3 < ./next_hooks.patch
+
+    - name: Apply Hide Stuff Patches
+      run: |
+        echo "Changing to configuration directory: $CONFIG..."
+        cd "$CONFIG/kernel_platform/common"
+        cp ../../../kernel_patches/69_hide_stuff.patch ./
+        patch -p1 -F 3 < 69_hide_stuff.patch
+
+    - name: Add SUSFS Configuration Settings
+      run: |
+        echo "Changing to configuration directory: $CONFIG..."
+        cd "$CONFIG/kernel_platform"
+        
+        echo "Adding configuration settings to gki_defconfig..."
         CONFIGS=(
           "CONFIG_KSU=y"
           "CONFIG_KSU_WITH_KPROBES=n"
@@ -125,22 +124,11 @@ jobs:
         for CONFIG in "${CONFIGS[@]}"; do
           echo "$CONFIG" >> ./common/arch/arm64/configs/gki_defconfig
         done
-        sed -i '2s/check_defconfig//' ./common/build.config.gki
-
-    - name: Run sed Commands
-      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
-      run: |
-        set -e
-        sed -i 's/-dirty//' ./common/scripts/setlocalversion || true
-        sed -i 's/-dirty//' ./msm-kernel/scripts/setlocalversion || true
-        sed -i 's/-dirty//' ./external/dtc/scripts/setlocalversion || true
-        sed -i 's/-dirty//' ./build/kernel/kleaf/workspace_status_stamp.py || echo "No workspace_status_stamp.py!"
 
     - name: Build Kernel
-      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/
+      working-directory: $CONFIG/kernel_platform
       run: |
-        cd kernel_platform
-        mkdir out
+        mkdir -p out
         export PATH="/usr/lib/ccache:$PATH"
         ./build_with_bazel.py \
           -t pineapple \
@@ -154,27 +142,19 @@ jobs:
           -o "$(pwd)/out" || { echo "Bazel build failed"; exit 1; }
 
     - name: Create ZIP Package
-      working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}
+      working-directory: $CONFIG/kernel_platform
       run: |
-        if [ ! -f kernel_platform/oneplus13r_v/kernel_platform/out/dist/Image ]; then
+        if [ ! -f out/dist/Image ]; then
           echo "❌ Kernel image not found"
           exit 1
         fi
-        cp kernel_platform/oneplus13r_v/kernel_platform/out/dist/Image AnyKernel3/Image || {
-          echo "❌ Failed to copy kernel image"
-          exit 1
-        }
-        cd AnyKernel3
+        cp out/dist/Image ../../AnyKernel3/Image || { echo "❌ Failed to copy kernel image"; exit 1; }
+        cd ../../AnyKernel3
         ZIP_NAME="OP13r-KSU-${{ env.KSUVER }}.zip"
-        zip -r "../$ZIP_NAME" ./* || {
-          echo "❌ Failed to create zip file"
-          exit 1
-        }
-        ls -lh "../$ZIP_NAME"
-        echo "zip_name=$ZIP_NAME" >> $GITHUB_ENV
+        zip -r "../$ZIP_NAME" ./* || { echo "❌ Failed to create zip file"; exit 1; }
 
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: kernel-${{ env.ROOT_DIR }}
-        path: /home/runner/work/BOuti/BOuti/build
+        name: kernel-$CONFIG
+        path: $CONFIG/kernel_platform/../*.zip
