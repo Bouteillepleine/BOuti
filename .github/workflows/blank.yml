@@ -275,7 +275,7 @@ jobs:
             --config=stamp \
             --user_kmi_symbol_lists=//msm-kernel:android/abi_gki_aarch64_qcom \
             --ignore_missing_projects \
-            --lto=thin \
+            --lto=full \
             -o "$(pwd)/out" || { echo "❌ Bazel build failed"; exit 1; }
           echo "Kernel build finished."
 
