@@ -13,7 +13,7 @@ jobs:
     env:
       ROOT_DIR: build_directory
       REPOS: |
-        https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1
+        https://gitlab.com/simonpunk/susfs4ksu.git
         https://github.com/WildPlusKernel/kernel_patches.git
       KERNEL_MANIFEST_URL: https://github.com/OnePlusOSS/kernel_manifest.git
       BRANCH: oneplus/sm8650
