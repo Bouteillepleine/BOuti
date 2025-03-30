@@ -33,9 +33,11 @@ jobs:
 
     - name: Clone repositories
       run: |
+        IFS=$'\n'
         for repo in ${{ env.REPOS }}; do
-          git clone $repo || { echo "Failed to clone $repo"; exit 1; }
+          git clone "$repo" || { echo "Failed to clone $repo"; exit 1; }
         done
+        unset IFS
 
     - name: Setup kernel platform
       working-directory: /home/runner/work/BOuti/BOuti/builds/${{ env.ROOT_DIR }}
