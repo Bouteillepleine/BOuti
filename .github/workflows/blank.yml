@@ -14,7 +14,8 @@ env:
 
 jobs:
   build-release:
-    runs-on: ubuntu-latest
+    # Running on standard runner, ThinLTO build
+    runs-on: ubuntu-latest 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -38,7 +39,7 @@ jobs:
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          max-size: 2G
+          max-size: 2G # Standard size for ubuntu-latest
 
       - name: Setup Python and Repo Tool
         run: |
@@ -162,7 +163,8 @@ jobs:
             "CONFIG_PM_SLEEP_SMP=y"
           )
           for CONFIG in "${CONFIGS[@]}"; do
-            echo "$CONFIG" >> ./common/arch/arm64/configs/gki_defconfig
+            # Avoid adding duplicate lines
+            grep -qxF "$CONFIG" ./common/arch/arm64/configs/gki_defconfig || echo "$CONFIG" >> ./common/arch/arm64/configs/gki_defconfig
           done
           echo "Modifying build.config.gki..."
           sed -i 's/check_defconfig//' ./common/build.config.gki
@@ -182,7 +184,7 @@ jobs:
           cd kernel_platform
           mkdir -p out
           export PATH="/usr/lib/ccache:$PATH"
-          echo "Starting kernel build..."
+          echo "Starting kernel build with ThinLTO..."
           ./build_with_bazel.py \
             -t pineapple \
             gki \
@@ -191,9 +193,11 @@ jobs:
             --config=stamp \
             --user_kmi_symbol_lists=//msm-kernel:android/abi_gki_aarch64_qcom \
             --ignore_missing_projects \
-            --lto=thin \
+            --lto=thin \ # Using ThinLTO suitable for ubuntu-latest
             -o "$(pwd)/out" || { echo "Bazel build failed"; exit 1; }
           echo "Kernel build finished."     
+
+      # NO STEP HERE TO DOWNLOAD SUSFS MODULE FROM CI/RELEASE
 
       - name: Create ZIP Package
         working-directory: builds/${{ env.ROOT_DIR }}
@@ -217,7 +221,6 @@ jobs:
           
           if [ -z "${{ env.KSUVER }}" ]; then
             echo "❌ KSUVER environment variable is not set!"
-            # Attempt to calculate it again as a fallback? Or just fail.
             exit 1
           fi
           ZIP_NAME="OP13r-KSU-${{ env.KSUVER }}.zip"
