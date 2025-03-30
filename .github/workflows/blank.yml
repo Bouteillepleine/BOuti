@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # Input removed as CI module download is now unconditional
+  workflow_dispatch:
 
 env:
   DEBIAN_FRONTEND: noninteractive
@@ -15,6 +15,7 @@ env:
 jobs:
   build-release:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -24,7 +25,7 @@ jobs:
       - name: Free Disk Space
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -qq curl jq # jq dependency for JSON parsing
+          sudo apt-get install -qq curl jq
           curl -fsSL https://raw.githubusercontent.com/kou/arrow/e49d8ae15583ceff03237571569099a6ad62be32/ci/scripts/util_free_space.sh | bash
 
       - name: Setup Build Environment
@@ -73,14 +74,6 @@ jobs:
             git clone $repo $branch_or_args "$dest" || { echo "Failed to clone $repo"; exit 1; }
           done
 
-      - name: Install Bazel
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y apt-transport-https curl gnupg
-          curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor >bazel-archive-keyring.gpg
-          sudo mv bazel-archive-keyring.gpg /usr/share/keyrings
-          sudo apt-get update && sudo apt-get install -y bazel
-
       - name: Setup Kernel Source
         working-directory: builds/${{ env.ROOT_DIR }}
         run: |
@@ -96,7 +89,7 @@ jobs:
           curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
           git submodule update --init --recursive
           cd KernelSU-Next/kernel
-          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" 10200)
+          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+ 10200")
           echo "Calculated KSU_VERSION: $KSU_VERSION"
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
@@ -150,25 +143,20 @@ jobs:
             "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y"
             "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y"
             "CONFIG_KSU_SUSFS_SUS_SU=n"
-            # Filesystem
             "CONFIG_TMPFS_XATTR=y"
             "CONFIG_TMPFS_POSIX_ACL=y"
-            # Network
             "CONFIG_IP_NF_TARGET_TTL=y"
             "CONFIG_IP6_NF_TARGET_HL=y"
             "CONFIG_IP6_NF_MATCH_HL=y"
-            # Scheduler
             "CONFIG_SCHED_CLASS_EXT=y"
             "CONFIG_SMP=y"
             "CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y"
             "CONFIG_MSM_PERFORMANCE=y"
-            # Power consumption
             "CONFIG_NO_HZ_IDLE=y"
             "CONFIG_PM_SLEEP_SMP=y"
           )
           for CONFIG in "${CONFIGS[@]}"; do
-            # Avoid adding duplicate lines
-            grep -qxF "$CONFIG" ./common/arch/arm64/configs/gki_defconfig || echo "$CONFIG" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "$CONFIG" >> ./common/arch/arm64/configs/gki_defconfig
           done
           echo "Modifying build.config.gki..."
           sed -i 's/check_defconfig//' ./common/build.config.gki
@@ -188,14 +176,16 @@ jobs:
           cd kernel_platform
           mkdir -p out
           export PATH="/usr/lib/ccache:$PATH"
-          echo "Starting kernel build with ThinLTO..."
-          bazel run //kernel:target \
+          echo "Starting kernel build..."
+          ./build_with_bazel.py \
+            -t pineapple \
+            gki \
             --jobs=$(nproc --all) \
             --verbose_failures \
             --config=stamp \
             --user_kmi_symbol_lists=//msm-kernel:android/abi_gki_aarch64_qcom \
             --ignore_missing_projects \
-            --lto=thin \ # Using ThinLTO suitable for ubuntu-latest
+            --lto=thin \
             -o "$(pwd)/out" || { echo "Bazel build failed"; exit 1; }
           echo "Kernel build finished."
 
@@ -211,9 +201,11 @@ jobs:
           fi
           echo "Copying Kernel Image to AnyKernel3..."
           cp "$KERNEL_IMAGE_PATH" AnyKernel3/Image || { echo "❌ Failed to copy kernel image"; exit 1; }
+          
           cd AnyKernel3
           echo "Contents of AnyKernel3 before zipping:"
           ls -lA
+
           if [ -z "${{ env.KSUVER }}" ]; then
             echo "❌ KSUVER environment variable is not set!"
             exit 1
