@@ -41,7 +41,7 @@ jobs:
         cd "$CONFIG"
         
         echo "Initializing and syncing kernel source..."
-        repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b ${{ inputs.branch }} -m ${{ inputs.manifest }} --repo-rev=v2.16 --depth=1
+        repo init -u https://github.com/OnePlusOSS/kernel_manifest/blob/oneplus/sm8650/oneplus_13r.xml --repo-rev=v2.16 --depth=1
         repo --trace sync -c -j$(nproc --all) --no-tags --fail-fast
 
     - name: Add KernelSU
