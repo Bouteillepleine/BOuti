@@ -101,6 +101,8 @@ jobs:
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
         run: |
           set -euxo pipefail
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1
+          git clone https://github.com/WildPlusKernel/kernel_patches.git
           cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common/
           cp kernel_patches/next/0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch ./KernelSU-Next/
           cp kernel_patches/next/syscall_hooks.patch ./common/
@@ -115,7 +117,7 @@ jobs:
             patch -p1 -F 3 < 69_hide_stuff.patch || true
           fi
           patch -p1 -F 3 < syscall_hooks.patch || true
-
+          
       # Step 11: Configure Kernel
       - name: Configure Kernel
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
