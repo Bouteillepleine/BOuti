@@ -11,11 +11,6 @@ env:
   ROOT_DIR_PREFIX: "OP13r-A15"
   BRANCH: "android14-6.1"
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  KERNEL_MANIFEST: "oneplus/sm8650"
-  KERNEL_XML: "oneplus_13r.xml"
-  ANYKERNEL_REPO: "https://github.com/Kernel-SU/AnyKernel3"
-  SUSFS_REPO: "https://gitlab.com/simonpunk/susfs4ksu.git"
-  PATCHES_REPO: "https://github.com/WildPlusKernel/kernel_patches.git"
 
 jobs:
   build-release:
@@ -36,7 +31,6 @@ jobs:
       # Step 3: Setup Build Environment
       - name: Setup Build Environment
         run: |
-          set -e
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             python3-pip curl git zip unzip gcc g++ make ninja-build \
@@ -52,7 +46,6 @@ jobs:
       # Step 5: Setup Python and Repo Tool
       - name: Setup Python and Repo Tool
         run: |
-          set -e
           python3 -m pip install --upgrade pip
           pip3 install gitpython xmltodict
           mkdir -p ~/.bin
@@ -65,7 +58,6 @@ jobs:
       # Step 6: Configure Build Directory
       - name: Configure Build Directory
         run: |
-          set -e
           ROOT_DIR="${ROOT_DIR_PREFIX}-$(date +'%Y-%m-%d-%I-%M-%p')-release"
           echo "ROOT_DIR=${ROOT_DIR}" >> $GITHUB_ENV
           mkdir -p "builds/${ROOT_DIR}"
@@ -74,11 +66,10 @@ jobs:
       - name: Clone Required Repositories
         working-directory: builds/${{ env.ROOT_DIR }}
         run: |
-          set -e
           repos=(
-            "${ANYKERNEL_REPO} --depth=1"
-            "${SUSFS_REPO} -b ${BRANCH}"
-            "${PATCHES_REPO}"
+            "https://github.com/Kernel-SU/AnyKernel3 --depth=1"
+            "https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1"
+            "https://github.com/WildPlusKernel/kernel_patches.git"
           )
           for repo in "${repos[@]}"; do
             git clone $repo || { echo "Failed to clone $repo"; exit 1; }
@@ -88,10 +79,9 @@ jobs:
       - name: Setup Kernel Source
         working-directory: builds/${{ env.ROOT_DIR }}
         run: |
-          set -e
           mkdir -p kernel_platform/oneplus13r_v
           cd kernel_platform/oneplus13r_v
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b ${KERNEL_MANIFEST} -m ${KERNEL_XML} --depth=1 || { echo "Failed to initialize repo"; exit 1; }
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m oneplus_13r.xml --depth=1 || { echo "Failed to initialize repo"; exit 1; }
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags || { echo "Failed to sync repo"; exit 1; }
           rm -rf ./kernel_platform/common/android/abi_gki_protected_exports_*
 
@@ -99,7 +89,6 @@ jobs:
       - name: Setup KernelSU
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
         run: |
-          set -e
           curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
           git submodule update --init --recursive
           cd KernelSU-Next/kernel
@@ -172,7 +161,6 @@ jobs:
       - name: Run sed Commands
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
         run: |
-          set -e
           echo "Running sed commands..."
           sed -i 's/check_defconfig//' ./common/build.config.gki
           sed -i 's/-dirty//' ./common/scripts/setlocalversion
@@ -184,9 +172,8 @@ jobs:
       - name: Build Kernel
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/
         run: |
-          set -e
           cd kernel_platform
-          mkdir -p out
+          mkdir out
           export PATH="/usr/lib/ccache:$PATH"
           ./build_with_bazel.py \
             -t pineapple \
@@ -201,6 +188,7 @@ jobs:
 
       # Step 14: Make AnyKernel3
       - name: Make AnyKernel3
+        working-directory: builds/${{ env.ROOT_DIR }}
         run: |
           git clone https://github.com/Numbersf/AnyKernel3 --depth=1
           rm -rf ./AnyKernel3/.git
@@ -227,7 +215,6 @@ jobs:
 
       # Optional: Clean up
       - name: Clean Up
-        if: always()  # Ensures this step runs even if previous steps fail
         run: |
           echo "Cleaning up temporary files..."
           rm -rf builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v
