@@ -19,7 +19,7 @@ jobs:
     steps:
       # Step 1: Checkout Code
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
 
       # Step 2: Free Disk Space
       - name: Free Disk Space
@@ -117,7 +117,7 @@ jobs:
             patch -p1 -F 3 < 69_hide_stuff.patch || true
           fi
           patch -p1 -F 3 < syscall_hooks.patch || true
-          
+
       # Step 11: Configure Kernel
       - name: Configure Kernel
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
@@ -141,7 +141,7 @@ jobs:
             "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y"
             "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y"
             "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y"
-            "CONFIG_KSU_SUSFS_SUS_SU=n"
+            "CONFIG_KSU_SUS_SU=n"
             "CONFIG_TMPFS_XATTR=y"
             "CONFIG_TMPFS_POSIX_ACL=y"
             "CONFIG_IP_NF_TARGET_TTL=y"
@@ -192,9 +192,17 @@ jobs:
       - name: Make AnyKernel3
         working-directory: builds/${{ env.ROOT_DIR }}
         run: |
-          git clone https://github.com/Numbersf/AnyKernel3 --depth=1
-          rm -rf ./AnyKernel3/.git
-          cp kernel_platform/out/msm-kernel-pineapple-gki/dist/Image ./AnyKernel3/
+          if [ ! -f kernel_platform/oneplus13r_v/kernel_platform/out/dist/Image ]; then
+            echo "❌ Kernel image not found"
+            exit 1
+          fi
+          cp kernel_platform/oneplus13r_v/kernel_platform/out/dist/Image AnyKernel3/Image || { echo "❌ Failed to copy kernel image"; exit 1; }
+          cd AnyKernel3
+          ZIP_NAME="OP13r-KSU-${{ env.KSUVER }}.zip"
+          echo "📦 Creating zip file: $ZIP_NAME"
+          zip -r "../$ZIP_NAME" ./* || { echo "❌ Failed to create zip file"; exit 1; }
+          ls -lh "../$ZIP_NAME"
+          echo "zip_name=$ZIP_NAME" >> $GITHUB_ENV
 
       # Step 15: Download Latest SUSFS Module from CI        
       - name: Download Latest SUSFS Module from CI        
@@ -210,12 +218,12 @@ jobs:
 
       # Step 16: Upload Build Artifacts
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v2
         with:
           name: kernel-${{ env.ROOT_DIR }}
           path: builds/${{ env.ROOT_DIR }}/*.zip
 
-      # Optional: Clean up
+      # Optional: Clean Up
       - name: Clean Up
         run: |
           echo "Cleaning up temporary files..."
