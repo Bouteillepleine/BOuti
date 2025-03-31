@@ -218,6 +218,7 @@ jobs:
 
       # Step 16: Upload Build Artifacts
       - name: Upload Build Artifacts
+        if: always() # Ensure this step always runs
         uses: actions/upload-artifact@v2
         with:
           name: kernel-${{ env.ROOT_DIR }}
