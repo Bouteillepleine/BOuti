@@ -11,6 +11,11 @@ env:
   ROOT_DIR_PREFIX: "OP13r-A15"
   BRANCH: "android14-6.1"
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  KERNEL_MANIFEST: "oneplus/sm8650"
+  KERNEL_XML: "oneplus_13r.xml"
+  ANYKERNEL_REPO: "https://github.com/Kernel-SU/AnyKernel3"
+  SUSFS_REPO: "https://gitlab.com/simonpunk/susfs4ksu.git"
+  PATCHES_REPO: "https://github.com/WildPlusKernel/kernel_patches.git"
 
 jobs:
   build-release:
@@ -71,9 +76,9 @@ jobs:
         run: |
           set -e
           repos=(
-            "https://github.com/Kernel-SU/AnyKernel3 --depth=1"
-            "https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1"
-            "https://github.com/WildPlusKernel/kernel_patches.git"
+            "${ANYKERNEL_REPO} --depth=1"
+            "${SUSFS_REPO} -b ${BRANCH}"
+            "${PATCHES_REPO}"
           )
           for repo in "${repos[@]}"; do
             git clone $repo || { echo "Failed to clone $repo"; exit 1; }
@@ -86,7 +91,7 @@ jobs:
           set -e
           mkdir -p kernel_platform/oneplus13r_v
           cd kernel_platform/oneplus13r_v
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m oneplus_13r.xml --depth=1 || { echo "Failed to initialize repo"; exit 1; }
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b ${KERNEL_MANIFEST} -m ${KERNEL_XML} --depth=1 || { echo "Failed to initialize repo"; exit 1; }
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags || { echo "Failed to sync repo"; exit 1; }
           rm -rf ./kernel_platform/common/android/abi_gki_protected_exports_*
 
@@ -194,24 +199,26 @@ jobs:
             --lto=thin \
             -o "$(pwd)/out" || { echo "Bazel build failed"; exit 1; }
 
-      # Step 14: Create ZIP Package
-      - name: Create ZIP Package
-        working-directory: builds/${{ env.ROOT_DIR }}
+      # Step 14: Make AnyKernel3
+      - name: Make AnyKernel3
         run: |
-          set -e
-          if [ ! -f kernel_platform/oneplus13r_v/kernel_platform/out/dist/Image ]; then
-            echo "❌ Kernel image not found"
-            exit 1
-          fi
-          cp kernel_platform/oneplus13r_v/kernel_platform/out/dist/Image AnyKernel3/Image || { echo "❌ Failed to copy kernel image"; exit 1; }
-          cd AnyKernel3
-          ZIP_NAME="OP13r-KSU-${{ env.KSUVER }}.zip"
-          echo "📦 Creating zip file: $ZIP_NAME"
-          zip -r "../$ZIP_NAME" ./* || { echo "❌ Failed to create zip file"; exit 1; }
-          ls -lh "../$ZIP_NAME"
-          echo "zip_name=$ZIP_NAME" >> $GITHUB_ENV
+          git clone https://github.com/Numbersf/AnyKernel3 --depth=1
+          rm -rf ./AnyKernel3/.git
+          cp kernel_platform/out/msm-kernel-pineapple-gki/dist/Image ./AnyKernel3/
 
-      # Step 15: Upload Build Artifacts
+      # Step 15: Download Latest SUSFS Module from CI        
+      - name: Download Latest SUSFS Module from CI        
+        run: |
+          LATEST_RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs" | jq -r '.workflow_runs[0].id')
+          
+          ARTIFACT_URL=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs/$LATEST_RUN_ID/artifacts" | jq -r '.artifacts[0].archive_download_url')
+          
+          curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -o ksu_module_susfs.zip "$ARTIFACT_URL"
+          cp ksu_module_susfs.zip ./AnyKernel3/
+
+      # Step 16: Upload Build Artifacts
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -220,6 +227,7 @@ jobs:
 
       # Optional: Clean up
       - name: Clean Up
+        if: always()  # Ensures this step runs even if previous steps fail
         run: |
           echo "Cleaning up temporary files..."
           rm -rf builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v
