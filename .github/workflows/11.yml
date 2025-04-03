@@ -69,7 +69,7 @@ jobs:
         run: |
           mkdir -p kernel_platform/oneplus13r_v
           cd kernel_platform/oneplus13r_v
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m oneplus_11_v.xml --depth=1 || { echo "Failed to initialize repo"; exit 1; }
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8550 -m oneplus_11_v.xml --depth=1 || { echo "Failed to initialize repo"; exit 1; }
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags || { echo "Failed to sync repo"; exit 1; }
           rm -rf ./kernel_platform/common/android/abi_gki_protected_exports_*
       - name: Setup KernelSU
