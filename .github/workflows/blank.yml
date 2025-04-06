@@ -75,9 +75,11 @@ jobs:
       - name: Setup KernelSU
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
         run: |
-          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next-susfs/kernel/setup.sh" | bash -s next-susfs-dev
+          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next
+          git submodule update --init --recursive
           cd KernelSU-Next/kernel
-          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" 10200)
+          # Calculate KSU version based on commit count
+          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) + 10200)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
       - name: Setup SUSFS
@@ -134,6 +136,58 @@ jobs:
             "CONFIG_MSM_PERFORMANCE=y"
             "CONFIG_NO_HZ_IDLE=y"
             "CONFIG_PM_SLEEP_SMP=y"
+            # Power management
+            "CONFIG_NO_HZ_IDLE=y"
+            "CONFIG_PM_SLEEP_SMP=y"
+            "CONFIG_ENERGY_MODEL=y"
+            "CONFIG_SCHED_MC=y"
+            "CONFIG_SCHED_TUNE=y"
+            "CONFIG_SCHED_HRTICK=y"
+            "CONFIG_SCHED_HMP=y"
+            "CONFIG_PM_AUTOSLEEP=y"
+            # Disable excessive debugging features
+            "CONFIG_DEBUG_KERNEL=n"
+            "CONFIG_DYNAMIC_DEBUG=n"
+            "CONFIG_DEBUG_INFO=n"
+            "CONFIG_DETECT_HUNG_TASK=n"
+            "CONFIG_SCHED_DEBUG=n"
+            "CONFIG_SCHEDSTATS=n"
+            "CONFIG_TIMER_STATS=n"
+            "CONFIG_PROVE_LOCKING=n"
+            "CONFIG_LOCKDEP=n"
+            "CONFIG_DEBUG_SPINLOCK=n"
+            "CONFIG_DEBUG_MUTEXES=n"
+            "CONFIG_DEBUG_WW_MUTEX_SLOWPATH=n"
+            "CONFIG_DEBUG_LOCK_ALLOC=n"
+            "CONFIG_DEBUG_KMEMLEAK=n"
+            "CONFIG_DEBUG_SLAB=n"
+            "CONFIG_DEBUG_PAGEALLOC=n"
+            "CONFIG_PAGE_OWNER=n"
+            "CONFIG_DEBUG_VM=n"
+            "CONFIG_DEBUG_VM_PGFLAGS=n"
+            "CONFIG_DEBUG_MEMORY_INIT=n"
+            "CONFIG_DEBUG_PREEMPT=n"
+            "CONFIG_DEBUG_RT_MUTEXES=n"
+            "CONFIG_DEBUG_LIST=n"
+            "CONFIG_DEBUG_SG=n"
+            "CONFIG_DEBUG_NOTIFIERS=n"
+            "CONFIG_DEBUG_CREDENTIALS=n"
+            "CONFIG_FTRACE=n"
+            "CONFIG_FUNCTION_TRACER=n"
+            "CONFIG_FUNCTION_GRAPH_TRACER=n"
+            "CONFIG_IRQSOFF_TRACER=n"
+            "CONFIG_PREEMPT_TRACER=n"
+            "CONFIG_SCHED_TRACER=n"
+            "CONFIG_BLK_DEV_IO_TRACE=n"
+            "CONFIG_KPROBE_EVENTS=n"
+            "CONFIG_UPROBE_EVENTS=n"
+            "CONFIG_EVENT_TRACING=n"
+            "CONFIG_MAGIC_SYSRQ=n"
+            "CONFIG_DEBUG_FS=n"
+            "CONFIG_DEBUG_STACK_USAGE=n"
+            "CONFIG_DEBUG_BUGVERBOSE=n"
+            "CONFIG_ANDROID_DEBUG_SYMBOLS=n"
+            "CONFIG_ANDROID_DEBUG_TRACE=n"            
           )
           for CONFIG in "${CONFIGS[@]}"; do
             echo "$CONFIG" >> ./common/arch/arm64/configs/gki_defconfig
