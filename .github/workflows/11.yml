@@ -150,16 +150,7 @@ jobs:
             "CONFIG_TIMER_STATS=n"
             "CONFIG_PROVE_LOCKING=n"
             "CONFIG_LOCKDEP=n"
-            "CONFIG_DEBUG_PREEMPT=n"
-            "CONFIG_DEBUG_RT_MUTEXES=n"
-            "CONFIG_DEBUG_LIST=n"
-            "CONFIG_EVENT_TRACING=n"
-            "CONFIG_MAGIC_SYSRQ=n"
-            "CONFIG_DEBUG_FS=n"
-            "CONFIG_DEBUG_STACK_USAGE=n"
-            "CONFIG_DEBUG_BUGVERBOSE=n"
-            "CONFIG_ANDROID_DEBUG_SYMBOLS=n"
-            "CONFIG_ANDROID_DEBUG_TRACE=n"
+            "CONFIG_DEBUG_PREEMPT=n"            
           )
           for CONFIG in "${CONFIGS[@]}"; do
             echo "$CONFIG" >> ./common/arch/arm64/configs/gki_defconfig
