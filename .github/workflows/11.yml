@@ -1,4 +1,4 @@
-name: OnePlus 11 Build Susf4Ksu
+name: OnePlus Build Susf4Ksu
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 env:
   DEBIAN_FRONTEND: noninteractive
   ROOT_DIR_PREFIX: "OP13r-A15"
-  BRANCH: "android13-5.15"
+  BRANCH: "android14-6.1"
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   
 jobs:
@@ -58,7 +58,7 @@ jobs:
         run: |
           repos=(
             "https://github.com/Kernel-SU/AnyKernel3 --depth=1"
-            "https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15"
+            "https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1"
             "https://github.com/WildPlusKernel/kernel_patches.git"
           )
           for repo in "${repos[@]}"; do
@@ -69,14 +69,13 @@ jobs:
         run: |
           mkdir -p kernel_platform/oneplus13r_v
           cd kernel_platform/oneplus13r_v
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8550 -m oneplus_11_v.xml --depth=1 || { echo "Failed to initialize repo"; exit 1; }
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m oneplus_13r.xml --depth=1 || { echo "Failed to initialize repo"; exit 1; }
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags || { echo "Failed to sync repo"; exit 1; }
           rm -rf ./kernel_platform/common/android/abi_gki_protected_exports_*
       - name: Setup KernelSU
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
         run: |
-          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next/kernel/setup.sh" | bash -s next-susfs-dev
-          git submodule update --init --recursive
+          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/next-susfs/kernel/setup.sh" | bash -s next-susfs-dev
           cd KernelSU-Next/kernel
           KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" 10200)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
@@ -85,9 +84,9 @@ jobs:
         working-directory: builds/${{ env.ROOT_DIR }}/kernel_platform/oneplus13r_v/kernel_platform
         run: |
           set -euxo pipefail
-          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1
           git clone https://github.com/WildPlusKernel/kernel_patches.git
-          cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch ./common/
+          cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common/
           cp kernel_patches/next/0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch ./KernelSU-Next/
           cp kernel_patches/next/syscall_hooks.patch ./common/
           cp susfs4ksu/kernel_patches/fs/* ./common/fs/
@@ -95,7 +94,7 @@ jobs:
           cd ./KernelSU-Next
           patch -p1 < 0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch || true
           cd ../common
-          patch -p1 < 50_add_susfs_in_gki-android13-5.15.patch || true
+          patch -p1 < 50_add_susfs_in_gki-android14-6.1.patch || true
           if [ -f kernel_patches/69_hide_stuff.patch ]; then
             cp kernel_patches/69_hide_stuff.patch ./
             patch -p1 -F 3 < 69_hide_stuff.patch || true
@@ -124,17 +123,43 @@ jobs:
             "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y"
             "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y"
             "CONFIG_KSU_SUSFS_SUS_SU=n"
+            # Filesystem
             "CONFIG_TMPFS_XATTR=y"
             "CONFIG_TMPFS_POSIX_ACL=y"
+            # Network
             "CONFIG_IP_NF_TARGET_TTL=y"
             "CONFIG_IP6_NF_TARGET_HL=y"
             "CONFIG_IP6_NF_MATCH_HL=y"
+            # Scheduler
             "CONFIG_SCHED_CLASS_EXT=y"
             "CONFIG_SMP=y"
             "CONFIG_CPU_FREQ_GOV_SCHEDUTIL=y"
             "CONFIG_MSM_PERFORMANCE=y"
+            # Power management
             "CONFIG_NO_HZ_IDLE=y"
             "CONFIG_PM_SLEEP_SMP=y"
+            "CONFIG_ENERGY_MODEL=y"
+            "CONFIG_PM_AUTOSLEEP=y"
+            # Disable excessive debugging features
+            "CONFIG_DEBUG_KERNEL=n"
+            "CONFIG_DYNAMIC_DEBUG=n"
+            "CONFIG_DEBUG_INFO=n"
+            "CONFIG_DETECT_HUNG_TASK=n"
+            "CONFIG_SCHED_DEBUG=n"
+            "CONFIG_SCHEDSTATS=n"
+            "CONFIG_TIMER_STATS=n"
+            "CONFIG_PROVE_LOCKING=n"
+            "CONFIG_LOCKDEP=n"
+            "CONFIG_DEBUG_PREEMPT=n"
+            "CONFIG_DEBUG_RT_MUTEXES=n"
+            "CONFIG_DEBUG_LIST=n"
+            "CONFIG_EVENT_TRACING=n"
+            "CONFIG_MAGIC_SYSRQ=n"
+            "CONFIG_DEBUG_FS=n"
+            "CONFIG_DEBUG_STACK_USAGE=n"
+            "CONFIG_DEBUG_BUGVERBOSE=n"
+            "CONFIG_ANDROID_DEBUG_SYMBOLS=n"
+            "CONFIG_ANDROID_DEBUG_TRACE=n"
           )
           for CONFIG in "${CONFIGS[@]}"; do
             echo "$CONFIG" >> ./common/arch/arm64/configs/gki_defconfig
