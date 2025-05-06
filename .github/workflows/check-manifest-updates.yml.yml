@@ -47,7 +47,7 @@ jobs:
         uses: benc-uk/workflow-dispatch@v1
         with:
           workflow: build-kernel-release.yml
-          ref: op13r
+          ref: pure
           inputs: '{ "make_release": "false" }'
         env:
           GITHUB_TOKEN: ${{ secrets.MY_PAT }}
