@@ -205,8 +205,19 @@ jobs:
           echo "CONFIG_IP_NF_NAT=y" >> ./common/arch/arm64/configs/gki_defconfig            
           echo "CONFIG_IP_NF_TARGET_TTL=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_IP6_NF_TARGET_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_IP6_NF_MATCH_HL=y" >> ./common/arch/arm64/configs/gki_defconfig      
-       
+          echo "CONFIG_IP6_NF_MATCH_HL=y" >> ./common/arch/arm64/configs/gki_defconfig
+
+           # ── ECN config setting ──
+          echo "CONFIG_IP_NF_TARGET_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_TCP_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_IPV6_ECN=y" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # ── Strip debug to reduce size ──
+          echo "CONFIG_DEBUG_KERNEL=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_DYNAMIC_DEBUG=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_DEBUG_INFO=n" >> ./common/arch/arm64/configs/gki_defconfig
+
       - name: Merge BBR v3 into Kernel Source
         run: |
           cd "$CONFIG/kernel_platform"
@@ -216,6 +227,7 @@ jobs:
           git fetch google-bbr v3
           git show-ref --verify --quiet refs/remotes/google-bbr/v3 || { echo "Error: google-bbr/v3 branch not found"; exit 1; }
           git merge google-bbr/v3 --allow-unrelated-histories -m "Merge BBR v3 into kernel"
+          sed -i 's/^\([[:space:]]*\)\.name[[:space:]]*=[[:space:]]*"bbr",/\1.name = "bbr3",/' ./common/net/ipv4/tcp_bbr.c
 
       - name: Add BBR Configuration Settings
         run: |
@@ -224,15 +236,20 @@ jobs:
           echo "CONFIG_TCP_CONG_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_DEFAULT_TCP_CONG=\"bbr\"" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TCP_CONG_CDG=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_DEFAULT_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig          
+          echo "CONFIG_DEFAULT_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_DEFAULT_CUBIC=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_DEFAULT_CDG=n" >> ./common/arch/arm64/configs/gki_defconfig          
+          echo "CONFIG_NET_SCH_DEFAULT=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_DEFAULT_FQ=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo 'CONFIG_DEFAULT_NET_SCH="fq"' >> ./common/arch/arm64/configs/gki_defconfig          
+          echo 'CONFIG_DEFAULT_NET_SCH="fq"' >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NET_SCH_HTB=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NET_SCH_PRIO=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NET_SCH_SFQ=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_NET_SCH_TBF=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_TCP_CONG_BIC=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_TCP_CONG_WESTWOOD=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_TCP_CONG_HTCP=y" >> ./common/arch/arm64/configs/gki_defconfig         
 
-      - name: Validate gki_defconfig for BBR and KernelSU Configurations
-        run: |
-          echo "Validating gki_defconfig for required configurations..."
-          CONFIG_FILE="$CONFIG/kernel_platform/common/arch/arm64/configs/gki_defconfig"
-         
       - name: Run sed and perl Commands
         run: |
           echo "Changing to configuration directory: $CONFIG..."
