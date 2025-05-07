@@ -220,8 +220,7 @@ jobs:
           git remote add google-bbr https://github.com/google/bbr.git
           git fetch google-bbr v3
           git show-ref --verify --quiet refs/remotes/google-bbr/v3 || { echo "Error: google-bbr/v3 branch not found"; exit 1; }
-          git merge google-bbr/v3 --allow-unrelated-histories -m "Merge BBR v3 into kernel"
-          sed -i 's/^\([[:space:]]*\)\.name[[:space:]]*=[[:space:]]*"bbr",/\1.name = "bbr3",/' ./common/net/ipv4/tcp_bbr.c
+          git merge google-bbr/v3 --allow-unrelated-histories -m "Merge BBR v3 into kernel"        
 
       - name: Add BBR Configuration Settings
         run: |
@@ -259,8 +258,7 @@ jobs:
 
           sed -i 's/CONFIG_LTO=n/CONFIG_LTO=y/' "./common/arch/arm64/configs/gki_defconfig"
           sed -i 's/CONFIG_LTO_CLANG_FULL=y/CONFIG_LTO_CLANG_THIN=y/' "./common/arch/arm64/configs/gki_defconfig"
-          sed -i 's/CONFIG_LTO_CLANG_NONE=y/CONFIG_LTO_CLANG_THIN=y/' "./common/arch/arm64/configs/gki_defconfig"
-          sed -i 's/\.name[[:space:]]*=[[:space:]]*"bbr",/\.name = "bbr3",/' ./common/net/ipv4/tcp_bbr.c
+          sed -i 's/CONFIG_LTO_CLANG_NONE=y/CONFIG_LTO_CLANG_THIN=y/' "./common/arch/arm64/configs/gki_defconfig"          
           
           # Run sed commands for modifications
           sed -i 's/check_defconfig//' ./common/build.config.gki
