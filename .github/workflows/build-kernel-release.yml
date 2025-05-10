@@ -14,10 +14,10 @@ on:
         default: true
 
 jobs:
-  build-batch-1: # Non Bazel Builds
-     strategy:
-     fail-fast: false
-      matrix:
+ build-batch-1: # Non Bazel Builds
+   strategy:
+    fail-fast: false
+    matrix:
         include:
           - model: OP11
             soc: kalama
