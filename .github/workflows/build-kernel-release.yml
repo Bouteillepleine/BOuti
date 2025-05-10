@@ -12,12 +12,12 @@ on:
         required: true
         type: boolean
         default: true
-
 jobs:
- build-batch-1: # Non Bazel Builds
+
+build-batch-1: # Non Bazel Builds
    strategy:
-    fail-fast: false
-    matrix:
+     fail-fast: false
+     matrix:
         include:
           - model: OP11
             soc: kalama
