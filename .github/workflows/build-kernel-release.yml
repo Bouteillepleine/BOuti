@@ -12,12 +12,12 @@ on:
         required: true
         type: boolean
         default: true
-jobs:
 
-build-batch-1: # Non Bazel Builds
-   strategy:
-     fail-fast: false
-     matrix:
+jobs:
+  build-batch-1: # Non Bazel Builds
+    strategy:
+      fail-fast: false
+      matrix:
         include:
           - model: OP11
             soc: kalama
@@ -137,7 +137,6 @@ build-batch-1: # Non Bazel Builds
 
   trigger-release:
     needs:
-      #- build-batch-1
       - build-batch-2
     runs-on: ubuntu-latest
     if: ${{ inputs.make_release }}
@@ -148,13 +147,10 @@ build-batch-1: # Non Bazel Builds
       RELEASE_NAME: "*TEST BUILD* OnePlus Kernels With KernelSU Next & SUSFS v1.5.5 *TEST BUILD*"
       RELEASE_NOTES: |
         This release contains KernelSU Next and SUSFS v1.5.5
-
         Module: 
         -> https://github.com/sidex15/ksu_module_susfs
-
         Non-Official Managers:
         -> https://github.com/KernelSU-Next/KernelSU-Next
-
         Features:
         [+] KernelSU-Next
         [+] SUSFS v1.5.5
@@ -162,7 +158,6 @@ build-batch-1: # Non Bazel Builds
         [+] Maphide LineageOS Detections
         [+] Futile Maphide for jit-zygote-cache Detections
         [+] Magic Mount Support
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
