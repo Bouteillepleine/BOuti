@@ -17,7 +17,7 @@ jobs:
   build-batch-1: # Non Bazel Builds
     strategy:
      fail-fast: false
-     matrix:
+      matrix:
         include:
           - model: OP11
             soc: kalama
